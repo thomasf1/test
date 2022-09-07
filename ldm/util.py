@@ -82,11 +82,14 @@ def instantiate_from_config(config, **kwargs):
         elif config == "__is_unconditional__":
             return None
         raise KeyError("Expected key `target` to instantiate.")
-    return get_obj_from_str(config["target"])(**config.get("params", dict()), **kwargs)
-
+    try:
+      return get_obj_from_str(config["target"])(**config.get("params", dict()), **kwargs).half()
+    except:
+      return get_obj_from_str(config["target"])(**config.get("params", dict()), **kwargs)
 
 def get_obj_from_str(string, reload=False):
     module, cls = string.rsplit(".", 1)
+    print('abc')
     if reload:
         module_imp = importlib.import_module(module)
         importlib.reload(module_imp)
