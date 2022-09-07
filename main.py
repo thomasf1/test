@@ -20,22 +20,33 @@ from pytorch_lightning.utilities import rank_zero_info
 
 from ldm.data.base import Txt2ImgIterableBaseDataset
 from ldm.util import instantiate_from_config
-
+from deepspeed.ops.adam import FusedAdam
 def load_model_from_config(config, ckpt, verbose=False):
     print(f"Loading model from {ckpt}")
     pl_sd = torch.load(ckpt, map_location="cpu")
     sd = pl_sd["state_dict"]
+    print('b')
     config.model.params.ckpt_path = ckpt
+
     model = instantiate_from_config(config.model)
+    def configure_optimizers():
+        return FusedAdam(model.parameters())
+    model.configure_optimizers = configure_optimizers
+    #trainer.fit(model)
+
+    print('c')
     m, u = model.load_state_dict(sd, strict=False)
+    print('a')
     if len(m) > 0 and verbose:
         print("missing keys:")
         print(m)
     if len(u) > 0 and verbose:
         print("unexpected keys:")
         print(u)
-
+    print('among us')
+    model.half()
     model.cuda()
+    model.float()
     return model
 
 def get_parser(**parser_kwargs):
@@ -544,7 +555,7 @@ if __name__ == "__main__":
     #               key: value
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-
+    print('A')
     # add cwd for convenience and to make classes in this file available when
     # running as `python main.py`
     # (in particular `main.DataModuleFromConfig`)
@@ -561,6 +572,7 @@ if __name__ == "__main__":
             "use -n/--name in combination with --resume_from_checkpoint"
         )
     if opt.resume:
+        print('B')
         if not os.path.exists(opt.resume):
             raise ValueError("Cannot find {}".format(opt.resume))
         if os.path.isfile(opt.resume):
@@ -600,6 +612,7 @@ if __name__ == "__main__":
     seed_everything(opt.seed)
 
     try:
+        print('c')
         # init and save configs
         configs = [OmegaConf.load(cfg) for cfg in opt.base]
         cli = OmegaConf.from_dotlist(unknown)
@@ -618,6 +631,7 @@ if __name__ == "__main__":
             gpuinfo = trainer_config["gpus"]
             print(f"Running on GPUs {gpuinfo}")
             cpu = False
+        print('d')
         trainer_opt = argparse.Namespace(**trainer_config)
         lightning_config.trainer = trainer_config
 
@@ -629,16 +643,16 @@ if __name__ == "__main__":
 
         # if opt.init_word:
         #     config.model.params.personalization_config.params.initializer_words[0] = opt.init_word
-            
+        print('e')     
         config.data.params.train.params.placeholder_token = opt.class_word
         config.data.params.reg.params.placeholder_token = opt.class_word
         config.data.params.validation.params.placeholder_token = opt.class_word
-
+        print('g')
         if opt.actual_resume:
             model = load_model_from_config(config, opt.actual_resume)
         else:
             model = instantiate_from_config(config.model)
-
+        print('f')
         # trainer and callbacks
         trainer_kwargs = dict()
 
@@ -761,6 +775,12 @@ if __name__ == "__main__":
 
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
         trainer_kwargs["max_steps"] = trainer_opt.max_steps
+        trainer_kwargs["precision"] = 16
+        trainer_kwargs["strategy"]  = "deepspeed_stage_3"
+        print(trainer_opt, trainer_kwargs)
+        del trainer_opt.accelerator
+        #del trainer_kwargs['accelerator']
+
 
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
         trainer.logdir = logdir  ###
