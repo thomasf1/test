@@ -12,6 +12,9 @@ from pytorch_lightning import seed_everything
 from torch import autocast
 from contextlib import contextmanager, nullcontext
 
+import sys
+sys.path.insert(0, '/'.join(sys.path[0].split('/')[:-1]))
+
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
@@ -28,17 +31,22 @@ def load_model_from_config(config, ckpt, verbose=False):
     if "global_step" in pl_sd:
         print(f"Global Step: {pl_sd['global_step']}")
     sd = pl_sd["state_dict"]
+    print('adolf')
     model = instantiate_from_config(config.model)
     m, u = model.load_state_dict(sd, strict=False)
+    print('hitler')
     if len(m) > 0 and verbose:
         print("missing keys:")
         print(m)
     if len(u) > 0 and verbose:
         print("unexpected keys:")
         print(u)
-
+    model.half()
+    print('here1')
     model.cuda()
+    print('here2')
     model.eval()
+    print('here3')
     return model
 
 
@@ -190,20 +198,25 @@ def main():
         opt.outdir = "outputs/txt2img-samples-laion400m"
 
     seed_everything(opt.seed)
+    print('among us')
 
     config = OmegaConf.load(f"{opt.config}")
+    print('among us')
     model = load_model_from_config(config, f"{opt.ckpt}")
     #model.embedding_manager.load(opt.embedding_path)
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
+    print('among us')
 
     if opt.plms:
         sampler = PLMSSampler(model)
     else:
         sampler = DDIMSampler(model)
 
+    print('among us')
     os.makedirs(opt.outdir, exist_ok=True)
+    print('among us')
     outpath = opt.outdir
 
     batch_size = opt.n_samples
@@ -223,7 +236,7 @@ def main():
     os.makedirs(sample_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
     grid_count = len(os.listdir(outpath)) - 1
-
+    print('among us')
     start_code = None
     if opt.fixed_code:
         start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=device)
