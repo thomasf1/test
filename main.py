@@ -20,30 +20,24 @@ from pytorch_lightning.utilities import rank_zero_info
 
 from ldm.data.base import Txt2ImgIterableBaseDataset
 from ldm.util import instantiate_from_config
-from deepspeed.ops.adam import FusedAdam
+
 def load_model_from_config(config, ckpt, verbose=False):
     print(f"Loading model from {ckpt}")
     pl_sd = torch.load(ckpt, map_location="cpu")
     sd = pl_sd["state_dict"]
     config.model.params.ckpt_path = ckpt
-
     model = instantiate_from_config(config.model)
-    def configure_optimizers():
-        return FusedAdam(model.parameters())
-    model.configure_optimizers = configure_optimizers
-    #trainer.fit(model)
-
     m, u = model.load_state_dict(sd, strict=False)
-
     if len(m) > 0 and verbose:
         print("missing keys:")
-
+        print(m)
     if len(u) > 0 and verbose:
         print("unexpected keys:")
+        print(u)
 
-    model.half()
-    model.cuda()
-    model.float()
+    model.half().cpu()
+    #model.cuda()
+    #model.float()
     return model
 
 def get_parser(**parser_kwargs):
@@ -84,7 +78,7 @@ def get_parser(**parser_kwargs):
         help="paths to base configs. Loaded from left-to-right. "
              "Parameters can be overwritten or added with command-line options of the form `--key value`.",
         default=list(),
-    )
+    ) 
     parser.add_argument(
         "-t",
         "--train",
@@ -509,6 +503,7 @@ class ModeSwapCallback(Callback):
             self.is_frozen = False
             trainer.optimizers = [pl_module.configure_opt_model()]
 
+from pytorch_lightning.strategies import DeepSpeedStrategy
 if __name__ == "__main__":
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
@@ -552,6 +547,7 @@ if __name__ == "__main__":
     #               key: value
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+
     # add cwd for convenience and to make classes in this file available when
     # running as `python main.py`
     # (in particular `main.DataModuleFromConfig`)
@@ -635,14 +631,17 @@ if __name__ == "__main__":
         # config.model.params.personalization_config.params.placeholder_tokens = opt.placeholder_tokens
 
         # if opt.init_word:
-        #     config.model.params.personalization_config.params.initializer_words[0] = opt.init_word    
+        #     config.model.params.personalization_config.params.initializer_words[0] = opt.init_word
+            
         config.data.params.train.params.placeholder_token = opt.class_word
         config.data.params.reg.params.placeholder_token = opt.class_word
         config.data.params.validation.params.placeholder_token = opt.class_word
+
         if opt.actual_resume:
             model = load_model_from_config(config, opt.actual_resume)
         else:
             model = instantiate_from_config(config.model)
+
         # trainer and callbacks
         trainer_kwargs = dict()
 
@@ -766,13 +765,21 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
         trainer_kwargs["max_steps"] = trainer_opt.max_steps
         trainer_kwargs["precision"] = 16
-        trainer_kwargs["strategy"]  = "deepspeed_stage_3"
+        #trainer_kwargs["strategy"]  = "deepspeed_stage_3_offload"
+
+        trainer_kwargs["strategy"]  = DeepSpeedStrategy(
+             stage=3,
+             offload_optimizer=True,
+             offload_parameters=True,
+         )
+        trainer_kwargs["devices"]  = 1
+        
+        trainer_opt.accelerator = "gpu"
         print(trainer_opt, trainer_kwargs)
-        del trainer_opt.accelerator
-        #del trainer_kwargs['accelerator']
-
-
+        
+        print('among')
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+        print('us')
         trainer.logdir = logdir  ###
 
         # data
@@ -787,12 +794,14 @@ if __name__ == "__main__":
         # lightning still takes care of proper multiprocessing though
         data.prepare_data()
         data.setup()
+        print(data)
         print("#### Data #####")
         for k in data.datasets:
             print(f"{k}, {data.datasets[k].__class__.__name__}, {len(data.datasets[k])}")
 
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
+        print(bs)
         if not cpu:
             ngpu = len(lightning_config.trainer.gpus.strip(",").split(','))
         else:
@@ -803,6 +812,7 @@ if __name__ == "__main__":
             accumulate_grad_batches = 1
         print(f"accumulate_grad_batches = {accumulate_grad_batches}")
         lightning_config.trainer.accumulate_grad_batches = accumulate_grad_batches
+        lightning_config.trainer.accumulate_grad_batches = 0
         if opt.scale_lr:
             model.learning_rate = accumulate_grad_batches * ngpu * bs * base_lr
             print(
@@ -837,7 +847,9 @@ if __name__ == "__main__":
         # run
         if opt.train:
             try:
+                print('among2')
                 trainer.fit(model, data)
+                print('us2')
             except Exception:
                 melk()
                 raise
