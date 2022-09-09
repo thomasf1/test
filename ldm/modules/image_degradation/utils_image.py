@@ -221,7 +221,7 @@ def read_img(path):
     # read image by cv2
     # return: Numpy float32, HWC, BGR, [0,1]
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)  # cv2.IMREAD_GRAYSCALE
-    img = img.astype(np.float32) / 255.
+    img = img.astype(np.float16) / 255.
     if img.ndim == 2:
         img = np.expand_dims(img, axis=2)
     # some images have 4 channels
@@ -248,7 +248,7 @@ def read_img(path):
 
 def uint2single(img):
 
-    return np.float32(img/255.)
+    return np.float16(img/255.)
 
 
 def single2uint(img):
@@ -258,7 +258,7 @@ def single2uint(img):
 
 def uint162single(img):
 
-    return np.float32(img/65535.)
+    return np.float16(img/65535.)
 
 
 def single2uint16(img):
@@ -275,19 +275,19 @@ def single2uint16(img):
 def uint2tensor4(img):
     if img.ndim == 2:
         img = np.expand_dims(img, axis=2)
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.).unsqueeze(0)
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.).unsqueeze(0).half()
 
 
 # convert uint to 3-dimensional torch tensor
 def uint2tensor3(img):
     if img.ndim == 2:
         img = np.expand_dims(img, axis=2)
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.)
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.).half()
 
 
 # convert 2/3/4-dimensional torch tensor to uint
 def tensor2uint(img):
-    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy().half()
     if img.ndim == 3:
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0).round())
@@ -300,12 +300,12 @@ def tensor2uint(img):
 
 # convert single (HxWxC) to 3-dimensional torch tensor
 def single2tensor3(img):
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float()
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().half()
 
 
 # convert single (HxWxC) to 4-dimensional torch tensor
 def single2tensor4(img):
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().unsqueeze(0)
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().unsqueeze(0).half()
 
 
 # convert torch tensor to single
@@ -327,15 +327,15 @@ def tensor2single3(img):
 
 
 def single2tensor5(img):
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1, 3).float().unsqueeze(0)
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1, 3).float().unsqueeze(0).half()
 
 
 def single32tensor5(img):
-    return torch.from_numpy(np.ascontiguousarray(img)).float().unsqueeze(0).unsqueeze(0)
+    return torch.from_numpy(np.ascontiguousarray(img)).float().unsqueeze(0).unsqueeze(0).half()
 
 
 def single42tensor4(img):
-    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1, 3).float()
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1, 3).float().half()
 
 
 # from skimage.io import imread, imsave
@@ -830,7 +830,7 @@ def imresize(img, scale, antialiasing=True):
             out_2[j, :, i] = out_1_aug[j, :, idx:idx + kernel_width].mv(weights_W[i])
     if need_squeeze:
         out_2.squeeze_()
-    return out_2
+    return out_2.half()
 
 
 # --------------------------------------------

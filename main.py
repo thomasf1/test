@@ -224,7 +224,17 @@ class ConcatDataset(Dataset):
 
     def __len__(self):
         return min(len(d) for d in self.datasets)
-    
+
+class FixedDataset(Dataset):
+  def __init__(self, dataset):
+    self.dataset = dataset
+  def __getitem__(self, idx):
+    ans = self.dataset[idx]
+    ans['image'] = np.array(ans['image'], dtype=np.float16)
+    return ans
+  def __len__(self):
+    return len(self.dataset)
+
 class DataModuleFromConfig(pl.LightningDataModule):
     def __init__(self, batch_size, train=None, reg = None, validation=None, test=None, predict=None,
                  wrap=False, num_workers=None, shuffle_test_loader=False, use_worker_init_fn=False,
@@ -263,6 +273,8 @@ class DataModuleFromConfig(pl.LightningDataModule):
         if self.wrap:
             for k in self.datasets:
                 self.datasets[k] = WrappedDataset(self.datasets[k])
+        for k in self.datasets:
+          self.datasets[k] = FixedDataset(self.datasets[k])
 
     def _train_dataloader(self):
         is_iterable_dataset = isinstance(self.datasets['train'], Txt2ImgIterableBaseDataset)
@@ -771,6 +783,15 @@ if __name__ == "__main__":
              stage=3,
              offload_optimizer=True,
              offload_parameters=True,
+             reduce_bucket_size=1,
+             allgather_bucket_size=1,
+             params_buffer_size=37945345,
+             max_in_cpu=1,
+             sub_group_size=1,
+             remote_device="nvme",
+             nvme_path = '/content',
+             partition_activations = True,
+             cpu_checkpointing = True,
          )
         trainer_kwargs["devices"]  = 1
         

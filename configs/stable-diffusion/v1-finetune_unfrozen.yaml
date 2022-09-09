@@ -116,5 +116,5 @@ lightning:
         increase_log_steps: False
 
   trainer:
-    benchmark: True
+    benchmark: False
     max_steps: 800
